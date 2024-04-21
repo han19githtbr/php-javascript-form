@@ -1,0 +1,188 @@
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Da+2:wght@400;500;600;700&family=Inter:wght@400;700;900&family=Josefin+Slab:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Mulish:ital,wght@0,200;0,300;0,400;0,500;1,200;1,300;1,400&display=swap');
+
+@import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css");
+
+@import url('https://fonts.googleapis.com/css2?family=Baloo+Da+2:wght@400;500;600;700&family=Inter:wght@400;700;900&family=Josefin+Slab:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Mulish:ital,wght@0,200;0,300;0,400;0,500;1,200;1,300;1,400&family=Poppins:wght@100&display=swap');
+
+
+*{
+  margin: 0; 
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Times New Roman';
+  color: white;  
+}
+
+:root {
+    --font-primary: "Baloo Da 2", serif;
+    --font-secundary: "Josefin Slab", serif;
+    --font-action: "Poppins", serif;
+}
+
+html, body {
+  height: 100%;  
+  background-repeat: no-repeat;
+  background-color: #1f1f1f;
+  //background: rgb(66, 55, 216) url('../images/email.png');  
+  place-items: center;
+  display: grid;  
+}
+
+.card-title {
+  text-align: center;
+  padding-top: 2rem;  
+  color: #0000ff;
+  text-shadow: 0.05rem 0.05rem white;
+  font-family: var(--font-secundary);  
+  animation: moveBanner 3s 1s forwards;
+}
+
+#card-text {
+  padding-top: 2rem;
+  text-align: justify;
+  color: #eaeaea;
+  margin: 2rem 2rem;  
+  font-family: var(--font-primary);  
+}
+
+@keyframes moveBanner {
+    0% {
+      transform: translateY(10rem) rotateY(-30deg);
+    }
+    100% {
+      transform: translateY(0) rotateY(0);
+      opacity: 1;
+    }
+}
+
+
+.contato h2{
+    font-size: 30px;
+    margin-top: 100px;
+    margin-bottom: 50px;
+    text-align: center; 
+    color: #0000ff;
+    text-shadow: 0.05rem 0.05rem white;
+    font-family: var(--font-primary);  
+    animation: moveBanner 3s 1s forwards;
+}
+
+.contato form {
+    width: 30rem;
+}
+
+label,
+input,
+textarea,
+button {
+    display: block;
+}
+
+
+input,
+textarea,
+button {
+    width: 100%;
+    font: inherit;
+    padding: 1.25rem;
+    font-weight: 700;
+}
+
+
+input,
+textarea {
+    margin-bottom: 1rem;
+    border: 0.05rem solid #1d90f5;
+    border-radius: 0.5rem;
+    //transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+input:hover,
+input:focus,
+textarea:hover,
+textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.3125rem #26344a;
+}
+
+label {
+    height: 1rem;
+    margin-bottom: 0.5rem;
+    color: #9da0a6;
+}
+
+textarea {
+    min-height: 10rem;
+    resize: vertical;
+}
+
+
+button {
+    border: none;
+    border-radius: 0.5rem;
+    color: white;
+    background: #0202ff;
+    cursor: pointer;
+    transition: 0.3s;
+    margin-bottom: 5rem;
+    font-weight: bold; 
+    color: #ffffff;
+    text-shadow: 0.05rem 0.05rem green;
+    font-family: var(--font-secundary);
+}
+
+
+button:hover,
+button:focus {
+    border: 0.1rem solid #0fffeb;
+    outline: none;
+    background: #1c70d3;
+}
+
+
+button:disabled {
+    cursor: not-allowed;
+    background: #555b69;
+}
+
+.success,
+.error {
+    text-align: center;
+}
+
+.success {
+    color: greenyellow;
+}
+
+.error {
+    color: tomato;
+}
+
+
+@media screen and (max-width: 768px){
+    .info-form{
+        flex-direction: column;
+    }
+    .info{
+        width: 100%;
+    }
+    .form{
+        width: 100%;
+        margin-bottom: 40px;
+    }
+}
+
+
+.salvar-email {
+    position: fixed; 
+    top: 20px; 
+    width: 150px;
+    right: 20px; 
+    z-index: 1000;
+    font-weight: bold; 
+    color: #0000ff;
+    background: lightblue;
+    text-shadow: 0.05rem 0.05rem black;
+    font-family: var(--font-secundary);
+}
