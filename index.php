@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Teste de Programação</title>
+  <title>Praticando JS e PHP</title>
 
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.0/css/bootstrap.min.css">
 
@@ -14,7 +14,7 @@
 
 
   <div class="card-body">
-    <h1 class="card-title">Teste de Programação</h1>
+    <h1 class="card-title">Formulário de Contato com JS e PHP</h1>
     <p id="card-text"></p>
   </div>
 
