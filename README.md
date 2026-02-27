@@ -28,3 +28,24 @@ Os testes de validação de campos para o envio de emails, funcionaram
 
 ## Dificuldades
 A aplicação ainda está dando erro na hora de enviar uma mensagem, após o preenchimento de todos os campos do formulário. 
+
+
+## Install composer
+
+cd C:\xampp\htdocs\php-javascript-form
+composer install
+
+## Log in
+
+http://localhost/php-javascript-form/
+
+
+## Create passwords for the app
+
+https://myaccount.google.com/apppasswords
+
+
+## In the cmd, to create the environment variable(.env)
+
+composer require vlucas/phpdotenv
+

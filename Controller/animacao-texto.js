@@ -14,7 +14,7 @@
   // Espera 2 segundos após o carregamento da página
   setTimeout(function() {
     var mensagem = document.getElementById('card-text');
-    var text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat.";
+    var text = "Esta aplicação é um sistema simples de envio de mensagens onde o usuário envia o seu nome e endereço e-mail para outro endereço e-mail real predefinido. Para isso, desenvolvi o Back-end em PHP e o Front-end em JavaScript.";
     var interval = 30;
   
     // Inicia a digitação da mensagem

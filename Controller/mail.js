@@ -20,7 +20,7 @@ function validarEmail(email) {
 function salvarEmail() {
     swal({
         title: "Importante",
-        text: "Digite o teu email:",
+        text: "Digite o email do destinatário:",
         content: {
             element: "input",
             attributes: {
@@ -106,7 +106,7 @@ $enviarMail.addEventListener('submit', (e) => {
 			let formData = new FormData($enviarMail)
 			formData.append('email', emailUser)
 
-			const url = "/Model/mail.php"
+			const url = "/php-javascript-form/Model/mail.php"
 			
 			// Utilizar fetch para enviar os dados para o Backend
 			fetch(url, {
