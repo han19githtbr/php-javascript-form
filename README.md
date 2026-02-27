@@ -49,3 +49,13 @@ https://myaccount.google.com/apppasswords
 
 composer require vlucas/phpdotenv
 
+
+## O .gitignore só ignora arquivos que ainda não foram commitados.
+
+## Para jogar o arquivo .env no .gitignore
+
+git rm --cached .env
+
+git commit -m "remove .env do rastreamento"
+
+git push
