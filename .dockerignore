@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────────
+# .dockerignore
+#
+# Lista de arquivos/pastas que NÃO devem ser copiados para dentro
+# do container Docker. Funciona como o .gitignore, mas para o Docker.
+#
+# Por que isso importa:
+#   - Reduz o tamanho do container (imagem mais leve e deploy mais rápido)
+#   - Evita que credenciais do .env local vazem para a imagem
+#   - O vendor/ será reinstalado pelo composer install no Dockerfile
+# ─────────────────────────────────────────────────────────────────
+
+# Credenciais — NUNCA enviar para o container
+.env
+
+# Dependências — serão reinstaladas pelo composer no build
+vendor/
+
+# Banco de dados local de desenvolvimento
+cache_dev.sqlite
+
+# Controle de versão
+.git
+.gitignore
+
+# Arquivos de documentação e configuração de desenvolvimento
+README.md
+*.docx
+
+# Cache e logs locais
+*.log
