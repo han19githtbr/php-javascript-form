@@ -1,15 +1,6 @@
 <?php
 /**
- * mail.php  (versão com SendGrid API HTTP + integração ao Caché)
- *
- * Usa a API REST do SendGrid em vez de SMTP, o que funciona em
- * qualquer plataforma de hospedagem (Render, Railway, Heroku, etc.)
- * pois não depende de portas SMTP abertas.
- *
- * Após enviar o e-mail com sucesso, este arquivo:
- *   1. Verifica se o remetente já existe no banco Caché/SQLite
- *   2. Se não existir, cadastra o paciente automaticamente
- *   3. Registra um log da mensagem enviada na tabela Saude.LogMensagem
+ * mail.php  (versão Resend API + integração ao Caché)
  */
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
@@ -18,17 +9,14 @@ error_reporting(0);
 require __DIR__ . '/../vendor/autoload.php';
 
 // ── Carrega variáveis de ambiente ─────────────────────────────────
-// Tenta .env local primeiro (desenvolvimento), depois usa as variáveis
-// já presentes no ambiente (Render, Railway, Docker --env-file, etc.)
 $envFile = __DIR__ . '/../.env';
 if (file_exists($envFile)) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
 }
 
-// Se as variáveis críticas ainda estiverem vazias, tenta getenv()
-// (alguns hosts expõem via getenv mas não via $_ENV)
-foreach (['MAIL_PASSWORD', 'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_USERNAME'] as $var) {
+// Fallback para getenv() (necessário em alguns hosts como Render)
+foreach (['MAIL_PASSWORD', 'MAIL_FROM', 'MAIL_FROM_NAME'] as $var) {
     if (empty($_ENV[$var]) && getenv($var) !== false) {
         $_ENV[$var] = getenv($var);
     }
@@ -47,23 +35,16 @@ if (empty($nomeUsuario) || empty($mensagemUsuario) || empty($emailUsuario) || em
     exit;
 }
 
-// ── Configurações do SendGrid ─────────────────────────────────────
-$sendgridKey    = $_ENV['MAIL_PASSWORD']  ?? '';
-$remetenteEmail = $_ENV['MAIL_FROM']      ?? $_ENV['MAIL_USERNAME'] ?? '';
+// ── Configurações do Resend ───────────────────────────────────────
+$resendKey      = $_ENV['MAIL_PASSWORD']  ?? '';
+$remetenteEmail = $_ENV['MAIL_FROM']      ?? 'onboarding@resend.dev';
 $remetenteNome  = $_ENV['MAIL_FROM_NAME'] ?? 'Sistema de Contato';
 
-// Diagnóstico: loga o estado das variáveis (nunca expõe a key completa)
-error_log("[mail.php] MAIL_PASSWORD: "  . (empty($sendgridKey)    ? 'VAZIA'  : 'ok (' . substr($sendgridKey, 0, 12)    . '...)'));
-error_log("[mail.php] MAIL_FROM: "      . (empty($remetenteEmail) ? 'VAZIA'  : $remetenteEmail));
-error_log("[mail.php] MAIL_FROM_NAME: " . (empty($remetenteNome)  ? 'VAZIA'  : $remetenteNome));
+error_log("[mail.php] MAIL_PASSWORD: " . (empty($resendKey)      ? 'VAZIA' : 'ok (' . substr($resendKey, 0, 10) . '...)'));
+error_log("[mail.php] MAIL_FROM: "     . (empty($remetenteEmail) ? 'VAZIA' : $remetenteEmail));
 
-if (empty($sendgridKey)) {
-    echo json_encode(['error' => true, 'mensagem' => 'Variável MAIL_PASSWORD não encontrada no servidor. Configure-a no painel do Render.']);
-    exit;
-}
-
-if (empty($remetenteEmail)) {
-    echo json_encode(['error' => true, 'mensagem' => 'Variável MAIL_FROM não encontrada no servidor. Configure-a no painel do Render.']);
+if (empty($resendKey)) {
+    echo json_encode(['error' => true, 'mensagem' => 'Variável MAIL_PASSWORD (Resend API key) não encontrada no servidor.']);
     exit;
 }
 
@@ -82,27 +63,24 @@ $corpoHtml = "
     </div>
 ";
 
+// ── Payload da API do Resend ──────────────────────────────────────
 $payload = [
-    'personalizations' => [[
-        'to' => [['email' => $emailDestino]],
-    ]],
-    'from'     => ['email' => $remetenteEmail, 'name' => $remetenteNome],
-    'reply_to' => ['email' => $emailUsuario,   'name' => $nomeUsuario],
+    'from'     => $remetenteNome . ' <' . $remetenteEmail . '>',
+    'to'       => [$emailDestino],
+    'reply_to' => $emailUsuario,
     'subject'  => 'Mensagem de Contato - ' . $nomeUsuario,
-    'content'  => [
-        ['type' => 'text/plain', 'value' => "De: $nomeUsuario\n\n$mensagemUsuario\n\nResponda para: $emailUsuario"],
-        ['type' => 'text/html',  'value' => $corpoHtml],
-    ],
+    'text'     => "De: $nomeUsuario\n\n$mensagemUsuario\n\nResponda para: $emailUsuario",
+    'html'     => $corpoHtml,
 ];
 
-// ── Chamada à API do SendGrid ─────────────────────────────────────
-$ch = curl_init('https://api.sendgrid.com/v3/mail/send');
+// ── Chamada à API do Resend ───────────────────────────────────────
+$ch = curl_init('https://api.resend.com/emails');
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST           => true,
     CURLOPT_POSTFIELDS     => json_encode($payload),
     CURLOPT_HTTPHEADER     => [
-        'Authorization: Bearer ' . $sendgridKey,
+        'Authorization: Bearer ' . $resendKey,
         'Content-Type: application/json',
     ],
     CURLOPT_TIMEOUT        => 30,
@@ -113,21 +91,17 @@ $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlErro   = curl_error($ch);
 curl_close($ch);
 
-error_log("[mail.php] SendGrid HTTP status: $httpStatus");
-error_log("[mail.php] SendGrid response: $resposta");
+error_log("[mail.php] Resend HTTP status: $httpStatus");
+error_log("[mail.php] Resend response: $resposta");
 
-// SendGrid retorna 202 Accepted em caso de sucesso
-if ($httpStatus !== 202) {
-    // Extrai a mensagem de erro real do SendGrid
-    $erroSg  = '';
+// Resend retorna 200 em caso de sucesso
+if ($httpStatus !== 200) {
     $decoded = json_decode($resposta, true);
-    if (!empty($decoded['errors'])) {
-        $erroSg = implode(' | ', array_column($decoded['errors'], 'message'));
-    }
+    $erroMsg = $decoded['message'] ?? $decoded['name'] ?? "HTTP $httpStatus";
 
     echo json_encode([
         'error'    => true,
-        'mensagem' => 'Erro SendGrid: ' . ($erroSg ?: "HTTP $httpStatus"),
+        'mensagem' => 'Erro Resend: ' . $erroMsg,
         'detalhes' => "HTTP $httpStatus" . ($curlErro ? " | cURL: $curlErro" : ''),
     ]);
     exit;
@@ -168,3 +142,4 @@ echo json_encode([
     'mensagem'   => 'Mensagem enviada com sucesso!',
     'cache_info' => $cacheInfo,
 ]);
+
