@@ -61,7 +61,7 @@ $campoEmail.addEventListener('blur', () => {
 
     mostrarBadge('🔍 Buscando no Caché...', '#6c757d');
 
-    const url = `/php-javascript-form/Model/buscar-paciente.php?email=${encodeURIComponent(emailDigitado)}`;
+    const url = `/Model/buscar-paciente.php?email=${encodeURIComponent(emailDigitado)}`;
 
     fetch(url)
         .then(res => res.json())
@@ -120,7 +120,7 @@ $enviarMail.addEventListener('submit', (e) => {
     let formData = new FormData($enviarMail);
     formData.append('email', emailUser);
 
-    const url = "/php-javascript-form/Model/mail.php";
+    const url = "/Model/mail.php";
 
     fetch(url, { method: 'POST', body: formData })
         .then(res => res.json())
