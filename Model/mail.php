@@ -279,4 +279,3 @@ function responder(bool $sucesso, string $mensagem, string $cacheInfo = ''): nev
     echo json_encode($payload, JSON_UNESCAPED_UNICODE);
     exit;
 }
-

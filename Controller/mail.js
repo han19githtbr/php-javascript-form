@@ -145,7 +145,7 @@ function solicitarEmailDestino() {
         },
     }).then((valor) => {
         if (valor === null) {
-            swal('Atenção', 'Clique em "Salvar Destinatário" e informe um e-mail.', 'error');
+            swal('Atenção', 'Clique em "Salvar Destinatário" e informe o e-mail do destinatário.', 'error');
         } else if (valor === '') {
             swal('Aviso', 'Nenhum e-mail digitado. Você pode fazer isso mais tarde.', 'warning');
         } else if (!validarEmail(valor)) {

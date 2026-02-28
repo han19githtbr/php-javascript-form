@@ -568,7 +568,7 @@
   <header class="page-header">
     <div class="eyebrow">Sistema de Mensagens</div>
     <h1>Fale <em>conosco</em></h1>
-    <p id="card-text">Envie sua mensagem de forma segura. Respondemos em até 24 horas.</p>
+    <p id="card-text">Envie sua mensagem de forma segura. Respondemos mais rápido possível.</p>
   </header>
 
   <!-- ── Body grid ── -->
