@@ -1,14 +1,15 @@
 # ─────────────────────────────────────────────────────────────────
 # Dockerfile
-#
 # Monta um container com PHP 8.2 + Apache para rodar no Render.
 # ─────────────────────────────────────────────────────────────────
 
 FROM php:8.2-apache
 
-# Instala libpq-dev (necessária para compilar pdo_pgsql)
-# docker-php-ext-install já habilita as extensões automaticamente
-RUN apt-get update && apt-get install -y libpq-dev \
+# unzip → necessário para o Composer extrair os pacotes
+# libpq-dev → necessário para compilar a extensão pdo_pgsql
+RUN apt-get update && apt-get install -y \
+        unzip \
+        libpq-dev \
     && docker-php-ext-install pdo pdo_pgsql \
     && rm -rf /var/lib/apt/lists/*
 
