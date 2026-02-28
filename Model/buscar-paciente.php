@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/json');
 
-// Captura qualquer erro fatal e retorna como JSON
+// Tratamento de erros
 set_error_handler(function($errno, $errstr) {
     echo json_encode(['encontrado' => false, 'erro' => $errstr]);
     exit;
@@ -9,8 +9,7 @@ set_error_handler(function($errno, $errstr) {
 
 require __DIR__ . '/../vendor/autoload.php';
 
-// No Render as variáveis já são injetadas pelo painel.
-// O .env só existe localmente (XAMPP). Carregamos só se existir.
+// Carrega .env apenas localmente
 $envFile = __DIR__ . '/../.env';
 if (file_exists($envFile)) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
@@ -28,9 +27,19 @@ if (empty($email)) {
 
 try {
     $cache  = new CacheConnection();
+    
+    if (!$cache->isDisponivel()) {
+        echo json_encode([
+            'encontrado' => false, 
+            'erro' => 'Banco de dados temporariamente indisponível'
+        ]);
+        exit;
+    }
+    
     $pdo    = $cache->getPDO();
     $tabela = $cache->tabela('Saude.Paciente');
 
+    // Query adaptada para PostgreSQL/SQLite
     $stmt = $pdo->prepare("
         SELECT PacienteId, Nome, Email, Telefone
         FROM $tabela
@@ -43,12 +52,15 @@ try {
         echo json_encode([
             'encontrado' => true,
             'paciente'   => $paciente,
-            'fonte'      => $cache->isDevMode() ? 'SQLite (simulação Caché)' : 'PostgreSQL (Render)',
+            'fonte'      => $cache->isDevMode() ? 'SQLite (desenvolvimento)' : 'PostgreSQL (produção)',
         ]);
     } else {
         echo json_encode(['encontrado' => false]);
     }
 
 } catch (Exception $e) {
-    echo json_encode(['encontrado' => false, 'erro' => $e->getMessage()]);
+    echo json_encode([
+        'encontrado' => false, 
+        'erro' => 'Erro na consulta: ' . $e->getMessage()
+    ]);
 }

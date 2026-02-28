@@ -1,17 +1,13 @@
-# ─────────────────────────────────────────────────────────────────
-# Dockerfile
-# Monta um container com PHP 8.2 + Apache para rodar no Render.
-# ─────────────────────────────────────────────────────────────────
-
 FROM php:8.2-apache
 
-# unzip → necessário para o Composer extrair os pacotes
-# libpq-dev → necessário para compilar a extensão pdo_pgsql
+# Instala dependências necessárias
 RUN apt-get update && apt-get install -y \
         unzip \
         libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql \
-    && rm -rf /var/lib/apt/lists/*
+        libssl-dev \
+        && docker-php-ext-install pdo pdo_pgsql \
+        && docker-php-ext-install pdo_mysql \
+        && rm -rf /var/lib/apt/lists/*
 
 # Instala o Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -20,15 +16,26 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 COPY . .
 
-# Instala as dependências PHP (PHPMailer, phpdotenv)
+# Ajusta permissões
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 755 /var/www/html/storage
+
+# Instala as dependências PHP
 RUN composer install --no-dev --optimize-autoloader
 
-# Copia a configuração do Apache
+# Configuração do Apache
 COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
-# Ativa o mod_rewrite
-RUN a2enmod rewrite
+# Ativa módulos necessários
+RUN a2enmod rewrite \
+    && a2enmod ssl \
+    && a2enmod headers
+
+# Cria diretório para logs
+RUN mkdir -p /var/log/apache2 \
+    && chown -R www-data:www-data /var/log/apache2
 
 EXPOSE 80
+EXPOSE 443
 
 CMD ["apache2-foreground"]

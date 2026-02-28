@@ -29,62 +29,142 @@
 
 class CacheConnection
 {
-    private PDO $pdo;
+    private ?PDO $pdo = null;
     private string $mode;
+    private string $erro = '';
 
     public function __construct()
     {
-        $this->mode = $_ENV['CACHE_MODE'] ?? 'sqlite';
-
-        if ($this->mode === 'odbc') {
-            // ── CONEXÃO REAL COM INTERSYSTEMS CACHÉ ──────────────────────
-            // Requer: driver ODBC da InterSystems + DSN configurado
-            // Documentação: https://docs.intersystems.com/latest/csp/docbook/DocBook.UI.Page.cls?KEY=BNETODBC
-            $dsn  = $_ENV['CACHE_DSN']  ?? 'CacheODBC';  // Nome do DSN ODBC configurado
-            $user = $_ENV['CACHE_USER'] ?? '_SYSTEM';    // Usuário padrão do Caché
-            $pass = $_ENV['CACHE_PASS'] ?? 'SYS';        // Senha padrão (dev only)
-
-            $this->pdo = new PDO("odbc:$dsn", $user, $pass, [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-        } else {
-            // ── MODO DESENVOLVIMENTO: SQLite simula o Caché ───────────────
-            // Mesma estrutura SQL, sem precisar instalar o Caché
-            $dbPath   = __DIR__ . '/../cache_dev.sqlite';
-            $this->pdo = new PDO("sqlite:$dbPath", null, null, [
-                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-            $this->criarTabelasDevMode();
+        // Pega o modo do ambiente
+        $this->mode = $_ENV['CACHE_MODE'] ?? $_ENV['APP_ENV'] === 'production' ? 'pgsql' : 'sqlite';
+        
+        try {
+            if ($this->mode === 'pgsql') {
+                $this->conectarPostgreSQL();
+            } else {
+                $this->conectarSQLite();
+            }
+        } catch (Exception $e) {
+            $this->erro = $e->getMessage();
+            error_log("Erro na conexão com banco: " . $this->erro);
+            
+            // Fallback: tenta SQLite se PostgreSQL falhar
+            if ($this->mode === 'pgsql') {
+                error_log("Fallback para SQLite devido a erro no PostgreSQL");
+                $this->mode = 'sqlite';
+                $this->conectarSQLite();
+            } else {
+                throw $e;
+            }
         }
     }
-
+    
     /**
-     * Cria as tabelas no SQLite (dev mode).
-     * A estrutura SQL é idêntica à que seria criada no Caché real.
-     * 
-     * No Caché real, você criaria via Management Portal ou ObjectScript:
-     *   CREATE TABLE Saude.Paciente (
-     *       PacienteId  INTEGER NOT NULL,
-     *       Nome        VARCHAR(100) NOT NULL,
-     *       Email       VARCHAR(150) NOT NULL,
-     *       Telefone    VARCHAR(20),
-     *       CriadoEm   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-     *       CONSTRAINT PK_Paciente PRIMARY KEY (PacienteId)
-     *   )
+     * Conexão com PostgreSQL (Render)
      */
-    private function criarTabelasDevMode(): void
+    private function conectarPostgreSQL(): void
     {
-        // SQLite não suporta schemas (Saude.Paciente), então usamos
-        // o nome de tabela composto. No Caché real, o schema é separado.
+        // Usa DATABASE_URL do Render ou constrói a partir de variáveis individuais
+        $dbUrl = $_ENV['DATABASE_URL'] ?? null;
+        
+        if ($dbUrl) {
+            // Formato: postgresql://usuario:senha@host:porta/banco
+            $this->pdo = new PDO($dbUrl);
+        } else {
+            // Fallback para conexão tradicional
+            $host = $_ENV['DB_HOST'] ?? 'localhost';
+            $port = $_ENV['DB_PORT'] ?? '5432';
+            $name = $_ENV['DB_NAME'] ?? 'cache_db';
+            $user = $_ENV['DB_USER'] ?? 'postgres';
+            $pass = $_ENV['DB_PASS'] ?? '';
+            
+            $dsn = "pgsql:host=$host;port=$port;dbname=$name;";
+            $this->pdo = new PDO($dsn, $user, $pass);
+        }
+        
+        // Configurações do PDO
+        $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        
+        // Cria as tabelas se não existirem (para PostgreSQL)
+        $this->criarTabelasPostgreSQL();
+    }
+    
+    /**
+     * Conexão com SQLite (desenvolvimento local)
+     */
+    private function conectarSQLite(): void
+    {
+        $dbPath = __DIR__ . '/../cache_dev.sqlite';
+        
+        // Cria o diretório se não existir
+        $dbDir = dirname($dbPath);
+        if (!is_dir($dbDir)) {
+            mkdir($dbDir, 0755, true);
+        }
+        
+        $this->pdo = new PDO("sqlite:$dbPath", null, null, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        ]);
+        
+        $this->criarTabelasSQLite();
+    }
+    
+    /**
+     * Cria tabelas no PostgreSQL
+     */
+    private function criarTabelasPostgreSQL(): void
+    {
+        // Cria schema se não existir
+        $this->pdo->exec("CREATE SCHEMA IF NOT EXISTS Saude");
+        
+        // Tabela de pacientes
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS Saude.Paciente (
+                PacienteId  SERIAL PRIMARY KEY,
+                Nome        VARCHAR(100) NOT NULL,
+                Email       VARCHAR(150) NOT NULL UNIQUE,
+                Telefone    VARCHAR(20),
+                CriadoEm    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        
+        // Tabela de log de mensagens
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS Saude.LogMensagem (
+                LogId       SERIAL PRIMARY KEY,
+                PacienteId  INTEGER NOT NULL REFERENCES Saude.Paciente(PacienteId),
+                Destinatario VARCHAR(150) NOT NULL,
+                EnviadoEm   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ");
+        
+        // Verifica se precisa popular com dados iniciais
+        $count = $this->pdo->query("SELECT COUNT(*) FROM Saude.Paciente")->fetchColumn();
+        if ((int)$count === 0) {
+            $this->pdo->exec("
+                INSERT INTO Saude.Paciente (Nome, Email, Telefone) VALUES
+                ('Dr. João Silva',     'joao.silva@hospital.com',   '(21) 99999-1111'),
+                ('Dra. Maria Santos',  'maria.santos@hospital.com', '(21) 99999-2222'),
+                ('Carlos Oliveira',    'carlos.oliveira@gmail.com', '(21) 99999-3333')
+            ");
+        }
+    }
+    
+    /**
+     * Cria tabelas no SQLite (desenvolvimento)
+     */
+    private function criarTabelasSQLite(): void
+    {
+        // SQLite não suporta schemas, então usamos nomes sem ponto
         $this->pdo->exec("
             CREATE TABLE IF NOT EXISTS Saude_Paciente (
                 PacienteId  INTEGER PRIMARY KEY AUTOINCREMENT,
                 Nome        TEXT    NOT NULL,
                 Email       TEXT    NOT NULL UNIQUE,
                 Telefone    TEXT,
-                CriadoEm   TEXT    DEFAULT (datetime('now'))
+                CriadoEm    TEXT    DEFAULT (datetime('now'))
             )
         ");
 
@@ -98,7 +178,7 @@ class CacheConnection
             )
         ");
 
-        // Popula com pacientes de exemplo na primeira execução
+        // Popula com dados de exemplo
         $count = $this->pdo->query("SELECT COUNT(*) FROM Saude_Paciente")->fetchColumn();
         if ((int)$count === 0) {
             $this->pdo->exec("
@@ -111,32 +191,41 @@ class CacheConnection
     }
 
     /**
-     * Retorna a PDO para uso direto nas queries.
-     * No Caché real, esta mesma PDO viria via ODBC.
+     * Retorna a PDO para uso nas queries
      */
     public function getPDO(): PDO
     {
+        if (!$this->pdo) {
+            throw new Exception("Banco de dados não disponível: " . $this->erro);
+        }
         return $this->pdo;
     }
 
     /**
-     * Retorna o nome da tabela correto para o modo atual.
-     * 
-     * Caché real : "Saude.Paciente"   (schema.tabela em ObjectScript)
-     * SQLite dev  : "Saude_Paciente"  (sem suporte a schemas)
+     * Retorna o nome da tabela correto para o modo atual
      */
     public function tabela(string $nomeLogico): string
     {
-        if ($this->mode === 'odbc') {
-            // No Caché, o separador de schema é ponto: Saude.Paciente
+        if ($this->mode === 'pgsql') {
+            // PostgreSQL: mantém o ponto (schema.tabela)
             return $nomeLogico;
         }
-        // No SQLite local, trocamos ponto por underscore
+        // SQLite: substitui ponto por underscore
         return str_replace('.', '_', $nomeLogico);
     }
 
     public function isDevMode(): bool
     {
-        return $this->mode !== 'odbc';
+        return $this->mode !== 'pgsql';
+    }
+    
+    public function isDisponivel(): bool
+    {
+        return $this->pdo !== null;
+    }
+    
+    public function getErro(): string
+    {
+        return $this->erro;
     }
 }
