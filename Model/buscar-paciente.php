@@ -1,30 +1,21 @@
 <?php
-/**
- * buscar-paciente.php
- * 
- * Endpoint chamado pelo JavaScript ao digitar o e-mail no formulário.
- * Consulta o banco Caché (ou SQLite em dev) e retorna os dados do paciente.
- * 
- * Rota: GET /php-javascript-form/Model/buscar-paciente.php?email=...
- * 
- * ── QUERY EQUIVALENTE NO CACHÉ REAL (via ODBC ou ObjectScript) ────
- * 
- *   SELECT PacienteId, Nome, Email, Telefone
- *   FROM Saude.Paciente
- *   WHERE Email = :email
- * 
- *   No ObjectScript ficaria assim:
- *   &SQL(SELECT Nome INTO :nome FROM Saude.Paciente WHERE Email = :email)
- * ──────────────────────────────────────────────────────────────────
- */
-
 header('Content-Type: application/json');
-ini_set('display_errors', 0);
+
+// Captura qualquer erro fatal e retorna como JSON
+set_error_handler(function($errno, $errstr) {
+    echo json_encode(['encontrado' => false, 'erro' => $errstr]);
+    exit;
+});
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
-$dotenv->load();
+// No Render as variáveis já são injetadas pelo painel.
+// O .env só existe localmente (XAMPP). Carregamos só se existir.
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+    $dotenv->load();
+}
 
 require __DIR__ . '/../Model/CacheConnection.php';
 
@@ -40,7 +31,6 @@ try {
     $pdo    = $cache->getPDO();
     $tabela = $cache->tabela('Saude.Paciente');
 
-    // Esta query SQL é idêntica à que rodaria no Caché real via ODBC
     $stmt = $pdo->prepare("
         SELECT PacienteId, Nome, Email, Telefone
         FROM $tabela
@@ -53,7 +43,7 @@ try {
         echo json_encode([
             'encontrado' => true,
             'paciente'   => $paciente,
-            'fonte'      => $cache->isDevMode() ? 'SQLite (simulação Caché)' : 'InterSystems Caché',
+            'fonte'      => $cache->isDevMode() ? 'SQLite (simulação Caché)' : 'PostgreSQL (Render)',
         ]);
     } else {
         echo json_encode(['encontrado' => false]);

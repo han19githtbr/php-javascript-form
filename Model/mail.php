@@ -36,8 +36,13 @@ use PHPMailer\PHPMailer\Exception;
 
 require __DIR__ . '/../vendor/autoload.php';
 
-$dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
-$dotenv->load();
+// Carrega o .env apenas se existir (localmente no XAMPP)
+// No Render as variáveis são injetadas automaticamente pelo painel
+$envFile = __DIR__ . '/../.env';
+if (file_exists($envFile)) {
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+    $dotenv->load();
+}
 
 require __DIR__ . '/../Model/CacheConnection.php';
 
@@ -51,7 +56,7 @@ if (empty($nomeUsuario) || empty($mensagemUsuario) || empty($emailUsuario) || em
     exit;
 }
 
-// ── 1. ENVIAR O E-MAIL (lógica original mantida) ─────────────────
+// ── 1. ENVIAR O E-MAIL ────────────────────────────────────────────
 $mail = new PHPMailer(true);
 
 try {
@@ -89,7 +94,7 @@ try {
     exit;
 }
 
-// ── 2. INTEGRAÇÃO COM O CACHÉ: registrar paciente e log ──────────
+// ── 2. REGISTRAR NO BANCO (PostgreSQL no Render / SQLite local) ───
 $cacheInfo = '';
 try {
     $cache  = new CacheConnection();
@@ -97,33 +102,25 @@ try {
     $tPac   = $cache->tabela('Saude.Paciente');
     $tLog   = $cache->tabela('Saude.LogMensagem');
 
-    // Verifica se o paciente (remetente) já existe no Caché
     $stmt = $pdo->prepare("SELECT PacienteId FROM $tPac WHERE Email = :email");
     $stmt->execute([':email' => $emailUsuario]);
     $paciente = $stmt->fetch();
 
     if ($paciente) {
         $pacienteId = $paciente['PacienteId'];
-        $cacheInfo  = 'Paciente já registrado no Caché (ID: ' . $pacienteId . ').';
+        $cacheInfo  = 'Paciente já registrado (ID: ' . $pacienteId . ').';
     } else {
-        // Cadastra o novo paciente no Caché
-        $insert = $pdo->prepare("
-            INSERT INTO $tPac (Nome, Email) VALUES (:nome, :email)
-        ");
+        $insert = $pdo->prepare("INSERT INTO $tPac (Nome, Email) VALUES (:nome, :email)");
         $insert->execute([':nome' => $nomeUsuario, ':email' => $emailUsuario]);
         $pacienteId = $pdo->lastInsertId();
-        $cacheInfo  = 'Paciente cadastrado no Caché (ID: ' . $pacienteId . ').';
+        $cacheInfo  = 'Paciente cadastrado (ID: ' . $pacienteId . ').';
     }
 
-    // Registra o log da mensagem enviada
-    $log = $pdo->prepare("
-        INSERT INTO $tLog (PacienteId, Destinatario) VALUES (:id, :dest)
-    ");
+    $log = $pdo->prepare("INSERT INTO $tLog (PacienteId, Destinatario) VALUES (:id, :dest)");
     $log->execute([':id' => $pacienteId, ':dest' => $email]);
 
 } catch (Exception $e) {
-    // Falha no Caché não impede o retorno de sucesso do e-mail
-    $cacheInfo = 'Aviso: não foi possível registrar no Caché. ' . $e->getMessage();
+    $cacheInfo = 'Aviso banco: ' . $e->getMessage();
 }
 
 echo json_encode([
