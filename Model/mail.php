@@ -55,35 +55,41 @@ if (empty($nomeUsuario) || empty($mensagemUsuario) || empty($emailUsuario) || em
     exit;
 }
 
-// ── 1. ENVIAR O E-MAIL com tratamento de erros melhorado ───
+// ── 1. ENVIAR O E-MAIL com configurações melhoradas ───
 $mail = new PHPMailer(true);
 $emailEnviado = false;
 $erroEmail = '';
 
 try {
-    // Configurações de depuração - desative em produção
-    // $mail->SMTPDebug = SMTP::DEBUG_SERVER;
-    
+    // Configurações SMTP
     $mail->isSMTP();
-    $mail->Host       = $_ENV['MAIL_HOST'] ?? 'smtp.gmail.com';
+    $mail->Host       = $_ENV['MAIL_HOST'];
     $mail->SMTPAuth   = true;
     $mail->Username   = $_ENV['MAIL_USERNAME'];
     $mail->Password   = $_ENV['MAIL_PASSWORD'];
     $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? PHPMailer::ENCRYPTION_STARTTLS;
     $mail->Port       = $_ENV['MAIL_PORT'] ?? 587;
     $mail->CharSet    = 'UTF-8';
-    $mail->Timeout    = 30; // Timeout de 30 segundos
+    $mail->Timeout    = 30; // Aumenta timeout
     
-    // Configurações adicionais para evitar problemas de conexão
-    $mail->SMTPOptions = array(
-        'ssl' => array(
+    // Configurações SSL mais permissivas para ambiente de produção
+    $mail->SMTPOptions = [
+        'ssl' => [
             'verify_peer' => false,
             'verify_peer_name' => false,
             'allow_self_signed' => true
-        )
-    );
+        ]
+    ];
+    
+    // Tenta diferentes portas/cifras se necessário
+    $mail->SMTPAutoTLS = true;
+    
+    // Desativa debug em produção
+    // $mail->SMTPDebug = SMTP::DEBUG_SERVER;
 
-    $mail->setFrom($_ENV['MAIL_USERNAME'], $nomeUsuario);
+    // Configurações de envio
+    //$mail->setFrom($_ENV['MAIL_USERNAME'], $nomeUsuario);
+    $mail->setFrom($emailUsuario, $nomeUsuario);
     $mail->addAddress($email);
     $mail->addReplyTo($emailUsuario, $nomeUsuario);
     $mail->Subject = 'Mensagem de Contato - Sistema Caché';
@@ -102,7 +108,6 @@ try {
         </div>
     ";
     
-    // Versão em texto plano para clientes que não suportam HTML
     $mail->AltBody = "Mensagem de: $nomeUsuario\n\n$mensagemUsuario\n\nPode responder para: $emailUsuario";
 
     $mail->send();
@@ -113,7 +118,6 @@ try {
     error_log("Erro ao enviar email: " . $erroEmail);
 }
 
-// Se o email não foi enviado, retorna erro
 if (!$emailEnviado) {
     echo json_encode([
         'error' => true, 

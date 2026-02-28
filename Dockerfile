@@ -7,6 +7,13 @@ RUN apt-get update && apt-get install -y \
         && docker-php-ext-install pdo pdo_pgsql \
         && rm -rf /var/lib/apt/lists/*
 
+
+# Testa conectividade com Gmail
+RUN apt-get update && apt-get install -y telnet && \
+    (echo "quit" | telnet smtp.gmail.com 587 || true) && \
+    (echo "quit" | telnet smtp.gmail.com 465 || true)
+
+
 # Instala o Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
