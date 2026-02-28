@@ -21,17 +21,17 @@
 FROM php:8.2-apache
 
 # Instala as extensões PHP necessárias
+# Nota: pdo_sqlite já vem compilado na imagem php:8.2-apache,
+# não precisa de apt-get. Apenas pdo_pgsql precisa de libpq-dev.
 RUN apt-get update && apt-get install -y \
         libpq-dev \
         libssl-dev \
     && docker-php-ext-install \
         pdo \
         pdo_pgsql \
-        pdo_sqlite \
         mbstring \
     && docker-php-ext-enable \
         pdo_pgsql \
-        pdo_sqlite \
     && rm -rf /var/lib/apt/lists/*
 
 # Instala o Composer (gerenciador de dependências PHP)
