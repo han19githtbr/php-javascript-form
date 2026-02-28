@@ -1,15 +1,14 @@
 FROM php:8.2-apache
 
-# Instala dependências necessárias
+# Instala dependências do sistema (libcurl4-openssl-dev é necessária
+# para compilar a extensão curl do PHP)
 RUN apt-get update && apt-get install -y \
         unzip \
         libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql \
+        libcurl4-openssl-dev \
+    && docker-php-ext-install pdo pdo_pgsql curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# Instala extensão cURL do PHP (necessária para a API do SendGrid)
-RUN docker-php-ext-install curl
 
 # Instala o Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
