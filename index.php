@@ -122,28 +122,35 @@
 
     /* ── Salvar email btn ── */
     #salvar-email {
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      z-index: 100;
-      background: var(--accent-dim);
-      border: 1px solid rgba(99,179,237,0.3);
-      color: var(--accent);
-      font-family: 'DM Sans', sans-serif;
-      font-size: 0.82rem;
-      font-weight: 600;
+      position: fixed !important;
+      top: 20px !important;
+      right: 20px !important;
+      left: auto !important;
+      width: auto !important;
+      max-width: 220px !important;
+      display: inline-flex !important;
+      align-items: center;
+      white-space: nowrap;
+      z-index: 1000;
+      background: var(--accent-dim) !important;
+      border: 1px solid rgba(99,179,237,0.3) !important;
+      color: var(--accent) !important;
+      font-family: 'DM Sans', sans-serif !important;
+      font-size: 0.82rem !important;
+      font-weight: 600 !important;
       letter-spacing: 0.04em;
-      padding: 9px 18px;
-      border-radius: 100px;
+      padding: 9px 18px !important;
+      border-radius: 100px !important;
       cursor: pointer;
       transition: var(--transition);
       backdrop-filter: blur(12px);
+      box-shadow: none !important;
     }
 
     #salvar-email:hover {
-      background: var(--accent);
-      color: #0d0f12;
-      box-shadow: 0 0 20px var(--accent-glow);
+      background: var(--accent) !important;
+      color: #0d0f12 !important;
+      box-shadow: 0 0 20px var(--accent-glow) !important;
       transform: translateY(-1px);
     }
 
@@ -535,14 +542,12 @@
     ═══════════════════════════════════════════════ */
     @media (max-width: 480px) {
       .card-contato { padding: 24px 20px; }
-      .page-header { padding-top: 36px; }
+      .page-header { padding-top: 60px; }
       #salvar-email {
-        position: static;
-        display: block;
-        width: calc(100% - 40px);
-        margin: 16px 20px 0;
-        border-radius: var(--radius);
-        text-align: center;
+        top: 12px !important;
+        right: 12px !important;
+        font-size: 0.75rem !important;
+        padding: 8px 14px !important;
       }
       .stat .val { font-size: 1.3rem; }
     }
