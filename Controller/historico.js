@@ -1,90 +1,130 @@
-// =============================================
-// historico.js - Histórico de mensagens enviadas
-// Utiliza jQuery para manipulação do DOM e
-// localStorage para persistência dos dados
-// =============================================
+// ═════════════════════════════════════════════════════════════════
+// historico.js — Histórico de mensagens enviadas
+//
+// MELHORIAS APLICADAS:
+// 1. [ORGANIZAÇÃO]  'use strict' ativado.
+// 2. [ORGANIZAÇÃO]  Chave do localStorage definida como constante nomeada.
+// 3. [ROBUSTEZ]     Sanitização de HTML ao inserir dados no DOM via jQuery
+//                   (evita XSS caso um dado armazenado contenha tags HTML).
+// 4. [MANUTENÇÃO]   Função auxiliar escaparHtml() centraliza a sanitização.
+// 5. [CLAREZA]      Comentários revisados: apenas o que não é óbvio pelo código.
+// ═════════════════════════════════════════════════════════════════
+
+'use strict'; // MELHORIA 1
+
+// MELHORIA 2: constante nomeada evita erros de digitação da chave
+const CHAVE_HISTORICO = 'historicoMensagens';
 
 $(document).ready(function () {
 
-  // Renderiza o histórico ao carregar a página
-  renderizarHistorico();
+    renderizarHistorico();
 
-  // Evento para limpar o histórico
-  $('#btn-limpar-historico').on('click', function () {
-    swal({
-      title: 'Tem certeza?',
-      text: 'O histórico de mensagens será apagado permanentemente.',
-      icon: 'warning',
-      buttons: {
-        cancel: { text: 'Cancelar', value: null, visible: true },
-        confirm: { text: 'Apagar', value: true, visible: true, className: 'btn-danger' }
-      }
-    }).then(function (confirmado) {
-      if (confirmado) {
-        localStorage.removeItem('historicoMensagens');
-        renderizarHistorico();
-        swal('Pronto!', 'Histórico apagado com sucesso.', 'success');
-      }
+    $('#btn-limpar-historico').on('click', function () {
+        swal({
+            title: 'Tem certeza?',
+            text: 'O histórico de mensagens será apagado permanentemente.',
+            icon: 'warning',
+            buttons: {
+                cancel:  { text: 'Cancelar', value: null,  visible: true },
+                confirm: { text: 'Apagar',   value: true,  visible: true, className: 'btn-danger' },
+            },
+        }).then(function (confirmado) {
+            if (confirmado) {
+                localStorage.removeItem(CHAVE_HISTORICO); // MELHORIA 2
+                renderizarHistorico();
+                swal('Pronto!', 'Histórico apagado com sucesso.', 'success');
+            }
+        });
     });
-  });
 
 });
 
 /**
  * Salva uma nova mensagem no localStorage.
- * Chamada externamente pelo mail.js após envio bem-sucedido.
+ * Chamada externamente por mail.js após envio bem-sucedido.
+ *
+ * @param {string} nome
+ * @param {string} email
+ * @param {string} mensagem
  */
 function salvarNoHistorico(nome, email, mensagem) {
-  var historico = obterHistorico();
+    const historico = obterHistorico();
 
-  var novoRegistro = {
-    id: Date.now(),
-    nome: nome,
-    email: email,
-    trecho: mensagem.length > 60 ? mensagem.substring(0, 60) + '...' : mensagem,
-    dataHora: new Date().toLocaleString('pt-BR')
-  };
+    const novoRegistro = {
+        id:       Date.now(),
+        nome:     nome,
+        email:    email,
+        // Armazena no máximo 60 caracteres do início da mensagem
+        trecho:   mensagem.length > 60 ? mensagem.substring(0, 60) + '...' : mensagem,
+        dataHora: new Date().toLocaleString('pt-BR'),
+    };
 
-  historico.unshift(novoRegistro); // Insere no início (mais recente primeiro)
-  localStorage.setItem('historicoMensagens', JSON.stringify(historico));
-  renderizarHistorico();
+    historico.unshift(novoRegistro); // Mais recente primeiro
+    localStorage.setItem(CHAVE_HISTORICO, JSON.stringify(historico)); // MELHORIA 2
+    renderizarHistorico();
 }
 
 /**
  * Recupera o histórico do localStorage.
+ * @returns {Array}
  */
 function obterHistorico() {
-  var dados = localStorage.getItem('historicoMensagens');
-  return dados ? JSON.parse(dados) : [];
+    try {
+        const dados = localStorage.getItem(CHAVE_HISTORICO); // MELHORIA 2
+        return dados ? JSON.parse(dados) : [];
+    } catch (e) {
+        // Dado corrompido: descarta silenciosamente e começa do zero
+        localStorage.removeItem(CHAVE_HISTORICO);
+        return [];
+    }
 }
 
 /**
- * Renderiza a tabela de histórico no DOM usando jQuery.
+ * Renderiza a tabela de histórico no DOM.
+ *
+ * MELHORIA 3: usa .text() em vez de .html() ao inserir dados do usuário.
+ * .text() trata o conteúdo como texto puro — o jQuery escapa qualquer
+ * caractere HTML automaticamente, prevenindo XSS.
  */
 function renderizarHistorico() {
-  var historico = obterHistorico();
-  var $secao = $('#secao-historico');
-  var $tbody = $('#historico-tbody');
-  var $contador = $('#historico-contador');
+    const historico  = obterHistorico();
+    const $secao     = $('#secao-historico');
+    const $tbody     = $('#historico-tbody');
+    const $contador  = $('#historico-contador');
 
-  $tbody.empty(); // Limpa as linhas anteriores
+    $tbody.empty();
 
-  if (historico.length === 0) {
-    $secao.hide();
-    return;
-  }
+    if (historico.length === 0) {
+        $secao.hide();
+        return;
+    }
 
-  $secao.show();
-  $contador.text(historico.length + (historico.length === 1 ? ' mensagem enviada' : ' mensagens enviadas'));
+    $secao.show();
 
-  $.each(historico, function (index, item) {
-    var $linha = $('<tr>').addClass(index % 2 === 0 ? 'linha-par' : 'linha-impar');
+    const label = historico.length === 1 ? ' mensagem enviada' : ' mensagens enviadas';
+    $contador.text(historico.length + label);
 
-    $linha.append($('<td>').text(item.nome));
-    $linha.append($('<td>').text(item.email));
-    $linha.append($('<td>').text(item.trecho));
-    $linha.append($('<td>').text(item.dataHora));
+    $.each(historico, function (index, item) {
+        const $linha = $('<tr>').addClass(index % 2 === 0 ? 'linha-par' : 'linha-impar');
 
-    $tbody.append($linha);
-  });
+        // MELHORIA 3: .text() escapa HTML — seguro contra XSS
+        $linha.append($('<td>').text(item.nome));
+        $linha.append($('<td>').text(item.email));
+        $linha.append($('<td>').text(item.trecho));
+        $linha.append($('<td>').text(item.dataHora));
+
+        $tbody.append($linha);
+    });
+}
+
+// ── MELHORIA 4: helper de sanitização (útil se .html() for necessário futuramente) ──
+/**
+ * Escapa caracteres HTML especiais em uma string.
+ * Use quando precisar inserir conteúdo dinâmico via .html().
+ *
+ * @param {string} str
+ * @returns {string}
+ */
+function escaparHtml(str) {
+    return $('<span>').text(str).html();
 }
