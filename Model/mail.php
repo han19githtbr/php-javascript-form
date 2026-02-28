@@ -1,42 +1,23 @@
 <?php
 /**
- * mail.php  (versão atualizada com integração ao Caché)
- * 
+ * mail.php  (versão com SendGrid API HTTP + integração ao Caché)
+ *
+ * Usa a API REST do SendGrid em vez de SMTP, o que funciona em
+ * qualquer plataforma de hospedagem (Render, Railway, Heroku, etc.)
+ * pois não depende de portas SMTP abertas.
+ *
  * Após enviar o e-mail com sucesso, este arquivo:
- *   1. Verifica se o remetente já existe no banco Caché
+ *   1. Verifica se o remetente já existe no banco Caché/SQLite
  *   2. Se não existir, cadastra o paciente automaticamente
  *   3. Registra um log da mensagem enviada na tabela Saude.LogMensagem
- * 
- * ── QUERIES EQUIVALENTES NO CACHÉ REAL ───────────────────────────
- * 
- *   -- Verificar se paciente existe:
- *   SELECT PacienteId FROM Saude.Paciente WHERE Email = :email
- * 
- *   -- Cadastrar novo paciente:
- *   INSERT INTO Saude.Paciente (Nome, Email) VALUES (:nome, :email)
- * 
- *   -- Registrar log:
- *   INSERT INTO Saude.LogMensagem (PacienteId, Destinatario) 
- *   VALUES (:id, :dest)
- * 
- *   No ObjectScript (Caché nativo) seria:
- *   Set pac = ##class(Saude.Paciente).%New()
- *   Set pac.Nome  = nome
- *   Set pac.Email = email
- *   Do pac.%Save()
- * ──────────────────────────────────────────────────────────────────
  */
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
 error_reporting(0);
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\SMTP;
-use PHPMailer\PHPMailer\Exception;
-
 require __DIR__ . '/../vendor/autoload.php';
 
-// Carrega o .env apenas se existir
+// Carrega o .env se existir (dev local)
 $envFile = __DIR__ . '/../.env';
 if (file_exists($envFile)) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
@@ -45,97 +26,101 @@ if (file_exists($envFile)) {
 
 require __DIR__ . '/../Model/CacheConnection.php';
 
-$nomeUsuario     = $_POST['nome']      ?? '';
-$mensagemUsuario = $_POST['mensagem']  ?? '';
-$emailUsuario    = $_POST['correio']   ?? '';
-$email           = $_POST['email']     ?? '';
+// ── Dados do formulário ───────────────────────────────────────────
+$nomeUsuario     = trim($_POST['nome']      ?? '');
+$mensagemUsuario = trim($_POST['mensagem']  ?? '');
+$emailUsuario    = trim($_POST['correio']   ?? '');
+$emailDestino    = trim($_POST['email']     ?? '');
 
-if (empty($nomeUsuario) || empty($mensagemUsuario) || empty($emailUsuario) || empty($email)) {
+if (empty($nomeUsuario) || empty($mensagemUsuario) || empty($emailUsuario) || empty($emailDestino)) {
     echo json_encode(['error' => true, 'mensagem' => 'Por favor, preencha todos os campos.']);
     exit;
 }
 
-// ── 1. ENVIAR O E-MAIL com configurações melhoradas ───
-$mail = new PHPMailer(true);
-$emailEnviado = false;
-$erroEmail = '';
+// ── Configurações do SendGrid (via variáveis de ambiente) ─────────
+$sendgridKey     = $_ENV['MAIL_PASSWORD']  ?? '';   // No SendGrid, a senha É a API key
+$remetenteEmail  = $_ENV['MAIL_FROM']      ?? $_ENV['MAIL_USERNAME'] ?? '';
+$remetenteNome   = $_ENV['MAIL_FROM_NAME'] ?? 'Sistema de Contato';
 
-try {
-    // Configurações SMTP
-    $mail->isSMTP();
-    $mail->Host       = $_ENV['MAIL_HOST'];
-    $mail->SMTPAuth   = true;
-    $mail->Username   = $_ENV['MAIL_USERNAME'];
-    $mail->Password   = $_ENV['MAIL_PASSWORD'];
-    $mail->SMTPSecure = $_ENV['MAIL_ENCRYPTION'] ?? PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port       = $_ENV['MAIL_PORT'] ?? 587;
-    $mail->CharSet    = 'UTF-8';
-    $mail->Timeout    = 30; // Aumenta timeout
-    
-    // Configurações SSL mais permissivas para ambiente de produção
-    $mail->SMTPOptions = [
-        'ssl' => [
-            'verify_peer' => false,
-            'verify_peer_name' => false,
-            'allow_self_signed' => true
-        ]
-    ];
-    
-    // Tenta diferentes portas/cifras se necessário
-    $mail->SMTPAutoTLS = true;
-    
-    // Desativa debug em produção
-    // $mail->SMTPDebug = SMTP::DEBUG_SERVER;
-
-    // Configurações de envio
-    //$mail->setFrom($_ENV['MAIL_USERNAME'], $nomeUsuario);
-    $mail->setFrom($emailUsuario, $nomeUsuario);
-    $mail->addAddress($email);
-    $mail->addReplyTo($emailUsuario, $nomeUsuario);
-    $mail->Subject = 'Mensagem de Contato - Sistema Caché';
-    $mail->isHTML(true);
-    $mail->Body = "
-        <div style='font-family:sans-serif; max-width:600px; margin:0 auto; background:#343a40; padding:20px;'>
-            <div style='background:#cce5ff; border:1px solid #b8daff; border-radius:4px; padding:12px 20px; margin-bottom:20px; font-size:1.2em;'>
-                <strong>Mensagem de:</strong> $nomeUsuario
-            </div>
-            <div style='color:#eee; font-size:18px; margin-bottom:30px;'>
-                " . nl2br(htmlspecialchars($mensagemUsuario)) . "
-            </div>
-            <div style='background:#48494a; color:#ddd; text-align:center; padding:10px; font-size:14px;'>
-                Pode responder para: <span style='text-decoration:underline;'>$emailUsuario</span>
-            </div>
-        </div>
-    ";
-    
-    $mail->AltBody = "Mensagem de: $nomeUsuario\n\n$mensagemUsuario\n\nPode responder para: $emailUsuario";
-
-    $mail->send();
-    $emailEnviado = true;
-
-} catch (Exception $e) {
-    $erroEmail = $mail->ErrorInfo;
-    error_log("Erro ao enviar email: " . $erroEmail);
+if (empty($sendgridKey)) {
+    echo json_encode(['error' => true, 'mensagem' => 'Chave de API do SendGrid não configurada.']);
+    exit;
 }
 
+// ── 1. ENVIAR O E-MAIL via API HTTP do SendGrid ───────────────────
+$corpoHtml = "
+    <div style='font-family:sans-serif; max-width:600px; margin:0 auto; background:#343a40; padding:20px; border-radius:8px;'>
+        <div style='background:#cce5ff; border:1px solid #b8daff; border-radius:4px; padding:12px 20px; margin-bottom:20px; font-size:1.2em;'>
+            <strong>Mensagem de:</strong> " . htmlspecialchars($nomeUsuario) . "
+        </div>
+        <div style='color:#eee; font-size:18px; margin-bottom:30px;'>
+            " . nl2br(htmlspecialchars($mensagemUsuario)) . "
+        </div>
+        <div style='background:#48494a; color:#ddd; text-align:center; padding:10px; font-size:14px;'>
+            Pode responder para: <span style='text-decoration:underline;'>" . htmlspecialchars($emailUsuario) . "</span>
+        </div>
+    </div>
+";
+
+$payload = [
+    'personalizations' => [[
+        'to' => [['email' => $emailDestino]],
+    ]],
+    'from'       => [
+        'email' => $remetenteEmail,   // ✅ Deve ser um remetente verificado no SendGrid
+        'name'  => $remetenteNome,
+    ],
+    'reply_to'   => [
+        'email' => $emailUsuario,
+        'name'  => $nomeUsuario,
+    ],
+    'subject'    => 'Mensagem de Contato - ' . $nomeUsuario,
+    'content'    => [
+        ['type' => 'text/plain', 'value' => "Mensagem de: $nomeUsuario\n\n$mensagemUsuario\n\nResponda para: $emailUsuario"],
+        ['type' => 'text/html',  'value' => $corpoHtml],
+    ],
+];
+
+$ch = curl_init('https://api.sendgrid.com/v3/mail/send');
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => json_encode($payload),
+    CURLOPT_HTTPHEADER     => [
+        'Authorization: Bearer ' . $sendgridKey,
+        'Content-Type: application/json',
+    ],
+    CURLOPT_TIMEOUT        => 30,
+]);
+
+$resposta   = curl_exec($ch);
+$httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlErro   = curl_error($ch);
+curl_close($ch);
+
+// SendGrid retorna 202 Accepted em caso de sucesso
+$emailEnviado = ($httpStatus === 202);
+
 if (!$emailEnviado) {
+    $detalhe = $curlErro ?: $resposta;
+    error_log("Erro SendGrid (HTTP $httpStatus): $detalhe");
     echo json_encode([
-        'error' => true, 
-        'mensagem' => 'Erro ao enviar email. Verifique sua conexão com a internet e as configurações SMTP.',
-        'detalhes' => $erroEmail
+        'error'    => true,
+        'mensagem' => 'Erro ao enviar email. Verifique as configurações do SendGrid.',
+        'detalhes' => "HTTP $httpStatus",
     ]);
     exit;
 }
 
-// ── 2. REGISTRAR NO BANCO (com tratamento de erro suave) ───
+// ── 2. REGISTRAR NO BANCO (com tratamento de erro suave) ──────────
 $cacheInfo = '';
 try {
-    $cache  = new CacheConnection();
-    $pdo    = $cache->getPDO();
-    $tPac   = $cache->tabela('Saude.Paciente');
-    $tLog   = $cache->tabela('Saude.LogMensagem');
+    $cache = new CacheConnection();
+    $pdo   = $cache->getPDO();
+    $tPac  = $cache->tabela('Saude.Paciente');
+    $tLog  = $cache->tabela('Saude.LogMensagem');
 
-    // Verifica se já existe
+    // Verifica se o paciente já existe
     $stmt = $pdo->prepare("SELECT PacienteId FROM $tPac WHERE Email = :email");
     $stmt->execute([':email' => $emailUsuario]);
     $paciente = $stmt->fetch();
@@ -152,10 +137,10 @@ try {
 
     // Registra o log
     $log = $pdo->prepare("INSERT INTO $tLog (PacienteId, Destinatario) VALUES (:id, :dest)");
-    $log->execute([':id' => $pacienteId, ':dest' => $email]);
+    $log->execute([':id' => $pacienteId, ':dest' => $emailDestino]);
 
 } catch (Exception $e) {
-    $cacheInfo = '⚠️ Aviso: Email enviado mas não foi possível registrar no banco.';
+    $cacheInfo = '⚠️ Email enviado, mas não foi possível registrar no banco.';
     error_log("Erro ao registrar no banco: " . $e->getMessage());
 }
 

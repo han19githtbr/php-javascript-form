@@ -4,15 +4,12 @@ FROM php:8.2-apache
 RUN apt-get update && apt-get install -y \
         unzip \
         libpq-dev \
-        && docker-php-ext-install pdo pdo_pgsql \
-        && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-install pdo pdo_pgsql \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-
-# Testa conectividade com Gmail
-RUN apt-get update && apt-get install -y telnet && \
-    (echo "quit" | telnet smtp.gmail.com 587 || true) && \
-    (echo "quit" | telnet smtp.gmail.com 465 || true)
-
+# Instala extensão cURL do PHP (necessária para a API do SendGrid)
+RUN docker-php-ext-install curl
 
 # Instala o Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
